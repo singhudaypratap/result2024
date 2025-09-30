@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PIET — Result Lookup (Fixed)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root{ --accent:#0d6efd; --ok:#0f9d58; --warn:#ffb020; --bad:#e11d48; --muted:#6b7280; }
+    body{ font-family: Inter,system-ui,Arial; background: linear-gradient(180deg,#f8fafc,#eef2ff); padding:28px; }
+    .container-card{ max-width:1100px; margin:0 auto; }
+    .card-shell{ background:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(16,24,40,0.07); padding:20px; }
+    .small-note{ color:var(--muted); font-size:13px; }
+    .avatar { width:72px; height:72px; border-radius:10px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--muted); font-size:18px; }
+    .summary-pill{ display:inline-flex; align-items:center; gap:10px; padding:8px 12px; border-radius:10px; background:#fbfdff; box-shadow:0 6px 18px rgba(16,24,40,0.03); }
+    .badge-pass{ background:linear-gradient(90deg,#e6ffed,#d1ffe0); color:var(--ok); font-weight:700; padding:6px 10px; border-radius:8px; }
+    .badge-fail{ background:linear-gradient(90deg,#ffe8e8,#ffdada); color:var(--bad); font-weight:800; padding:6px 10px; border-radius:8px; }
+    .subject-grid{ width:100%; overflow:auto; margin-top:12px; border-radius:8px; }
+    .subject-row{ display:flex; gap:8px; align-items:center; }
+    .subject-code, .subject-grade{ min-width:92px; padding:8px 10px; border-radius:8px; text-align:center; }
+    .subject-code{ background:#f8fafc; color:var(--muted); font-weight:600; }
+    .subject-grade{ background:#fff; border:1px solid #f1f5f9; font-weight:700; }
+    .g-App{ background:linear-gradient(90deg,#e6ffed,#d1ffe0); color:var(--ok); }
+    .g-A{ background:#e9f9f0; color:var(--ok); }
+    .g-B{ background:#fff7e6; color:#6b4a00; }
+    .g-C{ background:#fff4f1; color:#7a2b1c; }
+    .g-F{ background:#ffecec; color:var(--bad); border:1px solid rgba(225,29,72,0.08); }
+    .info-grid{ display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; align-items:center; }
+    .info-item{ background:#fbfdff; padding:8px 12px; border-radius:8px; color:var(--muted); font-weight:600; }
+    @media(max-width:880px){ .subject-code, .subject-grade{ min-width:76px; } }
+  </style>
+</head>
+<body>
+  <div class="container-card">
+    <div class="card-shell">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <h3 class="mb-0">PIET — Result Lookup</h3>
+          <div class="small-note">Enter registration number and select branch</div>
+        </div>
+        <div class="d-flex gap-2">
+          <button id="downloadCSV" class="btn btn-outline-secondary btn-sm">Download CSV</button>
+          <button id="printBtn" class="btn btn-outline-secondary btn-sm">Print</button>
+        </div>
+      </div>
+
+      <div class="mb-3 d-flex gap-3" style="flex-wrap:wrap">
+        <div style="flex:1; min-width:220px;">
+          <label class="form-label mb-1">Registration Number</label>
+          <input id="reg" class="form-control form-control-lg" placeholder="PIET23CS001">
+        </div>
+        <div style="width:260px;">
+          <label class="form-label mb-1">Branch</label>
+          <select id="branch" class="form-select form-select-lg">
+            <option>CS</option><option>CSR-D</option><option>AI&DS-E</option><option>CS(AI)-F</option><option>CS(DS)-G</option><option>CS(IOT)-H</option>
+          </select>
+        </div>
+        <div style="width:220px;">
+          <button id="btn" class="btn btn-primary btn-lg w-100">Get Result</button>
+        </div>
+      </div>
+
+      <div id="msg" class="mb-3"></div>
+
+      <div id="results-container">
+        <div id="placeholder" class="text-center py-5">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Crect width='96' height='96' fill='%23eef2ff' rx='12'/%3E%3C/svg%3E" alt="" class="mb-2">
+          <div class="h6">No query yet</div>
+          <div class="small-note">Enter registration number and click <strong>Get Result</strong>.</div>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top:18px;" class="small-note">Developed by <strong>Department of AI &amp; DS, PIET Jaipur</strong></div>
+    </div>
+  </div>
+
+<script>
+const btn = document.getElementById('btn');
+const regInput = document.getElementById('reg');
+const branchSelect = document.getElementById('branch');
+const resultsContainer = document.getElementById('results-container');
+const msgDiv = document.getElementById('msg');
+const downloadCSVBtn = document.getElementById('downloadCSV');
+const printBtn = document.getElementById('printBtn');
+
+function escapeHtml(s){ if(s === null || s === undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function gradeClass(g){ if(!g) return ''; const s = String(g).trim().toUpperCase(); if(s==='A++'||s==='A+') return 'g-App'; if(s.startsWith('A')) return 'g-A'; if(s.startsWith('B')) return 'g-B'; if(s.startsWith('C')||s.startsWith('D')) return 'g-C'; if(s==='F'||s.includes('FAIL')) return 'g-F'; return ''; }
+function showMessage(html, type='info'){ const cls = type==='error' ? 'alert-danger' : (type==='warn' ? 'alert-warning' : 'alert-info'); msgDiv.innerHTML = `<div class="alert ${cls}">${html}</div>`; }
+
+function renderStudentCard(row){
+  const keys = Object.keys(row);
+  const findKey = (cands) => { const lk = keys.map(k=>k.toLowerCase()); for(const cand of cands){ const c=cand.toLowerCase(); for(let i=0;i<lk.length;i++){ if(lk[i]===c) return keys[i]; } for(let i=0;i<lk.length;i++){ if(lk[i].includes(c) || c.includes(lk[i])) return keys[i]; } } return null; };
+  const regKey = findKey(['reg','registration']) || keys[0];
+  const nameKey = findKey(['name','student name']) || null;
+  const uniKey = findKey(['uni-roll','uni roll','uni roll no']) || null;
+  const colKey = findKey(['col roll','college roll','section','class']) || null;
+  const subjectKeys = keys.filter(k=>{ const kn=k.toLowerCase(); if([regKey,nameKey,uniKey,colKey].includes(k)) return false; if(/index|s\.no|sno|sr|serial/.test(kn)) return false; if(/total|back|result|sgpa|gpa|status|roll|name/.test(kn)) return false; if(/[0-9]/.test(k)&&/[A-Za-z]/.test(k)) return true; if(/fec|fep|feco|4cs|cs|ee|ma/i.test(kn)) return true; return false; });
+  const totalBackKey = findKey(['total back','back','totalback','backlog']) || null;
+  const resultKey = findKey(['result','status']) || null;
+  const sgpaKey = findKey(['sgpa','gpa','cgpa']) || null;
+  let totalBackVal = totalBackKey ? row[totalBackKey] : null;
+  if((totalBackVal===undefined || totalBackVal==='') && !totalBackKey){ let count=0; subjectKeys.forEach(sk=>{ const v=(row[sk]||'').toString().trim().toUpperCase(); if(v==='F'||v.includes('FAIL')) count++; }); totalBackVal=String(count); }
+  const avatarText = (row[nameKey]||row[regKey]||'').toString().split(' ').slice(0,2).map(p=>p[0]||'').join('').toUpperCase() || 'PI';
+  const card = document.createElement('div'); card.style.borderBottom='1px solid #f1f5f9'; card.style.padding='14px 0';
+  const studentMetaHTML = `
+    <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+      <div class="avatar">${escapeHtml(avatarText)}</div>
+      <div>
+        <h5 style="margin:0">${escapeHtml(row[regKey]||'')} <small style="font-weight:600;color:var(--muted)">— ${escapeHtml(row[nameKey]||'')}</small></h5>
+        <div class="small-note">${uniKey? 'Uni-Roll: '+escapeHtml(row[uniKey]||'') : ''} ${colKey? ' · Col Roll: '+escapeHtml(row[colKey]||'') : ''}</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+        <div class="summary-pill">
+          ${ (resultKey && String(row[resultKey]||'').toLowerCase().startsWith('f')) ? `<div class="badge-fail">Fail</div>` : '<div class="badge-pass">Pass</div>' }
+          <div style="min-width:90px; text-align:right;"><div style="font-size:12px;color:var(--muted)">Total Back</div><div style="font-weight:700">${escapeHtml(totalBackVal||'0')}</div></div>
+          <div style="min-width:90px; text-align:right;"><div style="font-size:12px;color:var(--muted)">SGPA</div><div style="font-weight:700">${escapeHtml(row[sgpaKey]||row['SGPA']||'')}</div></div>
+        </div>
+      </div>
+    </div>`;
+  let subjCodesHTML=''; let subjGradesHTML='';
+  if(subjectKeys.length){ subjectKeys.forEach(sk=>{ subjCodesHTML += `<div class="subject-code">${escapeHtml(sk)}</div>`; const grade=row[sk]||''; const cl=gradeClass(grade); subjGradesHTML += `<div class="subject-grade ${cl}">${escapeHtml(grade)}</div>`; }); } else subjCodesHTML = `<div class="small-note">No subject columns detected.</div>`;
+  card.innerHTML = `${studentMetaHTML}<div class="subject-grid"><div class="subject-row" style="margin-top:12px;">${subjCodesHTML}</div><div class="subject-row" style="margin-top:8px;">${subjGradesHTML}</div></div><div class="info-grid" style="justify-content:flex-start;margin-top:12px;"><div class="info-item">Result: <strong style="margin-left:8px">${escapeHtml(row[resultKey]||row['Result']||'')}</strong></div><div class="info-item">Total Back: <strong style="margin-left:8px">${escapeHtml(totalBackVal||'0')}</strong></div><div class="info-item">SGPA: <strong style="margin-left:8px">${escapeHtml(row[sgpaKey]||row['SGPA']||'')}</strong></div></div>`;
+  return card;
+}
+
+function renderResults(rows){ resultsContainer.innerHTML=''; if(!rows||rows.length===0){ resultsContainer.innerHTML='<div class="alert alert-info">No record found.</div>'; return; } rows.forEach(r=>{ const card=renderStudentCard(r); resultsContainer.appendChild(card); }); setupCSV(); }
+
+function setupCSV(){ downloadCSVBtn.onclick = ()=>{ if(window.__lastResponseJSON && window.__lastResponseJSON.result){ const rows = window.__lastResponseJSON.result; const allKeys = Array.from(rows.reduce((s,r)=>{ Object.keys(r).forEach(k=>s.add(k)); return s; }, new Set())); const csv = [allKeys.map(k=>`"${k.replace(/"/g,'""')}"`).join(',')].concat(rows.map(r=>allKeys.map(k=>`"${(r[k]||'').toString().replace(/"/g,'""')}"`).join(','))).join('\n'); const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='result.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); } else alert('No downloadable data available. Try running the query again.'); }; }
+
+btn.addEventListener('click', async ()=>{
+  const reg = regInput.value.trim(); const branch = branchSelect.value;
+  resultsContainer.innerHTML=''; msgDiv.innerHTML='';
+  if(!reg){ showMessage('Please enter registration number.', 'warn'); return; }
+  btn.disabled=true; btn.innerText='Searching...';
+  try{
+    const qs = new URLSearchParams({ reg, branch });
+    const resp = await fetch(`/api/result?${qs.toString()}`);
+    const text = await resp.text(); // read once
+    let data;
+    try{ data = JSON.parse(text); } catch(e){ showMessage('Server returned: '+escapeHtml(text), 'error'); return; }
+    window.__lastResponseJSON = data;
+    if(resp.status===200){ renderResults(data.result || []); } else { showMessage(escapeHtml(data.error || 'Request failed'), 'error'); }
+  }catch(err){ showMessage(escapeHtml(err.message || 'Request failed'), 'error'); } finally { btn.disabled=false; btn.innerText='Get Result'; }
+});
+
+printBtn.addEventListener('click', ()=>window.print());
+regInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') btn.click(); });
+</script>
+</body>
+</html>
